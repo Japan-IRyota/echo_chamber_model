@@ -1,0 +1,299 @@
+
+agent_all = 200 #エージェントの人数
+action_num = 20000 #行動回数
+until_find = 100 #許容範囲内の意見を見つけるまでの回数
+agents_list = []
+all_segment = 20
+left_list = list(range(1, all_segment+1))
+kyoyohani = 0.5
+friend_following_out_range_ratio_constant = 0.3
+from random import randint
+import random
+
+
+import numpy as np
+from matplotlib import pyplot as plt
+fig = plt.figure()
+
+import networkx as nx
+
+#エージェントの設計図
+class Agent():
+
+    #初期化
+    def __init__(self, agent_num, opn):
+        self.agent_num = agent_num
+        self.opn = opn
+        self.opn_max = self.opn + kyoyohani
+        self.opn_min = self.opn - kyoyohani
+        self.following_list = []
+        self.followers_list = []
+
+
+    #許容範囲内True、許容範囲外ならFalseをリターン
+    def see_opn(self, seen_agent):
+
+        #見られる人の意見は来てる
+        #print(seen_agent.opn)
+
+        if (self.opn_max > seen_agent.opn) and (self.opn_min < seen_agent.opn):
+            return True
+        else:
+            return False
+
+
+    #アンフォローする
+    def unfollow(self):
+
+        if (len(self.following_list) == 0):
+
+            return
+        
+        else:
+            for my_following in self.following_list:
+
+                if (self.see_opn(my_following) == False):
+
+                    self.following_list.remove(my_following)
+
+
+                    #print('私の番号は', self.agent_num)
+                    #print('私は', hhh.agent_num, 'をアンフォローします')
+
+                    return
+                
+                else:
+                    #フォローしている人のフォローしている人の許容範囲外カウント
+                    self_out_range_count = 0
+
+                    #self_in_range_count = 0
+                    if(len(my_following.following_list) != 0):
+                       
+                        #フォローしている人とフォローしている人
+                        for friend_following in my_following.following_list:
+                            #print(friend_following.agent_num)
+                            
+                            #もしフォローしている人のフォローしている人が範囲外ならカウント
+                            if(self.see_opn(friend_following) == False):
+                                self_out_range_count = self_out_range_count + 1
+                            
+                            #もし範囲内ならノーカウント
+                            else:
+                                pass
+                        
+                        #フォローしている人のフォロー欄がどれくらいの割合で、自分の範囲外か
+                        friend_following_out_range_ratio =  self_out_range_count / len(my_following.following_list)
+
+                        #もしフォローしている人が一定の割合以上の範囲外の人をフォローをしていたらアンフォロー
+                        if(friend_following_out_range_ratio >= friend_following_out_range_ratio_constant):
+                            self.following_list.remove(my_following)
+                            return
+                        
+                        else:
+                            continue
+                    else:
+                        continue
+            return
+
+    def Yourself(self, seen_agent):
+        return seen_agent is self
+
+    def AlreadyFollowing(self, seen_agent):
+        return seen_agent in self.following_list
+
+
+
+    def follow(self, seen_agent):
+
+        if self.Yourself(seen_agent):
+            return False
+
+        if self.AlreadyFollowing(seen_agent):
+            return False
+
+        #action_agentがseen_agentを追加する
+        self.following_list.append(seen_agent)
+
+        #seen_agentのフォロワーリストにaction_agentを追加
+        seen_agent.followers_list.append(self)
+
+        """
+        #フォローした人表示（確認済み）
+        print('私の番号は',self.agent_num, 'フォローリストは')
+        print([following.agent_num for following in self.following_list])
+        print('------------')
+        """
+
+        #自分の意見を書き換えたい
+        #意見の合計を出すまた、自分の意見も入れる
+        sum_opn = self.opn
+
+        #following_listの中から、意見を抜き出す
+        for in_list_agent in self.following_list:
+
+            #意見の合計を出す
+            sum_opn = sum_opn + in_list_agent.opn
+
+        #following_listの人数と自分一人の合計人数で割り、新たに自分の意見とする
+        self.opn = sum_opn / (len(self.following_list) + 1)
+
+        #自分の番号と意見は何ですか
+        #print(self.agent_num, 'の意見は',self.opn)
+    
+    """
+    def tweet(self, see_agent):
+    """
+
+    #アクション
+    def action(self, agents_list):
+
+        self.unfollow()
+
+        #どの方法で相手を選びますか
+        how_action = randint(1, 2)
+
+        #もし1ならオススメと、検索から(ランダム)
+        if(how_action == 1):
+
+            #範囲内の人を見つけるまでやりなさい
+            for until_find_time_a in range(until_find):
+
+
+                #意見を見られる側をランダムに選ぶ
+                seen_agent = random.choice(agents_list)
+
+
+                #もし相手の意見を見て、許容範囲内だったら
+                if(self.see_opn(seen_agent)):
+
+                    #その人をフォローして
+                    self.follow(seen_agent)
+
+                    #自分のフォローリストをシャッフルしてください
+                    random.shuffle(self.following_list)
+                    return
+
+                else:
+                    continue
+
+        #もし2になら友達の友達から選ぶ
+        else:
+            #自分のフォローリストから選びなさい
+            for following in self.following_list:
+
+                #自分のフォローリストのフォローリストを見ましょう
+                for following_of_following in following.following_list:
+
+                    #もしフォローしている人のフォローしている人の意見が許容範囲内なら
+                    if(self.see_opn(following_of_following)):
+
+                        #フォローしてください
+                        self.follow(following_of_following)
+
+                        #フォローリストをシャッフルしてください
+                        random.shuffle(self.following_list)
+
+                        return
+
+                    else:
+                        continue
+
+            #print('友達の友達は気が合いませんでした')
+
+
+
+
+#インスタンス化とその他命令
+def main():
+
+    #今からagents_listをいじりますよ
+    global agents_list
+
+    #インスタンス化
+    for i in range(agent_all):
+
+        #意見生成
+        opn_i = -1 + (2*i / (agent_all-1))
+
+        #インスタンス化(エージェントナンバー、意見を引数)
+        agent_i = Agent(i, opn_i)
+
+        #インスタンスをリストにappend(確認済み)
+        agents_list.append(agent_i)
+
+    for kkk in range(action_num+1):
+        #誰が起こすのか
+        action_agent = random.choice(agents_list)
+
+        #アクションエージェントよ。アクションしておいで。
+
+        action_agent.action(agents_list)
+        for uuu in range(1, 11):
+            if (kkk == uuu * (action_num / 10)):
+                devide(kkk)
+    
+    graph()
+    
+    """
+    for nnn in agents_list:
+        if(nnn.agent_num >= 90 and nnn.agent_num <= 110):
+            print(nnn.opn)
+    """
+
+def devide(kkk):
+    segment_list = [0] * all_segment
+
+    for devided_agent in agents_list:
+
+        for segment_num in range(all_segment):
+
+            lower_limit = -1 + (2 * segment_num / all_segment)
+            upper_limit = -1 + (2 * (segment_num + 1) / all_segment)
+
+            if(lower_limit <= devided_agent.opn and devided_agent.opn < upper_limit):
+
+                segment_list[segment_num] += 1
+
+            else:
+                pass
+    print('--------------')
+    print(segment_list)
+
+    #print(left_list)
+
+    x = np.array(left_list)
+
+    """
+    for split in range(1, all_split):
+        split_num = split * (all_segment / all_split)
+        height_list.append(split_num)
+    """
+
+    y = np.array(segment_list)
+    plt.bar(x, y)
+    plt.savefig(f'{kkk}_img.png')
+    plt.close()
+
+
+#グラフ化
+def graph():
+    G = nx.Graph()
+    
+    #ノード(agentのナンバー)
+    for node_agent in agents_list:
+        G.add_node(node_agent.agent_num)
+    
+    #new_node_agentはフォローしている側
+    for new_node_agent in agents_list:
+        #connect_agentはフォローされている側
+        for connect_agent in new_node_agent.following_list:
+            #エッジ(線)を出現
+            G.add_edge(new_node_agent.agent_num, connect_agent.agent_num)
+    
+    nx.draw_networkx(G, with_labels = True)
+    #plt.show()
+    plt.savefig(f'network.png')
+
+if __name__ == '__main__':
+    main()
+
